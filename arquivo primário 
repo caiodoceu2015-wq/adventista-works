@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Período Cambriano — Modos & Eventos</title>
+<style>
+  :root{
+    --bg:#071821; --panel:rgba(7,18,27,0.92); --text:#eefaff; --accent:#7fe8ff; --gold:#ffd166; --ok:#7ce9ae; --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#082437 0%,#031014 100%);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+  canvas{display:block;width:100vw;height:100vh}
+  /* UI */
+  #ui{position:fixed;left:12px;top:12px;z-index:60;display:flex;flex-direction:column;gap:8px;min-width:240px}
+  .panel{background:var(--panel);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+  .row{display:flex;gap:8px;align-items:center}
+  .label{font-size:12px;color:#bfeeff}
+  input,select,button{font:inherit}
+  input,select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(8,20,28,0.6);color:var(--text)}
+  .btn{padding:8px 10px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(180deg,#2da3c9,#166281);color:white;font-weight:700}
+  .btn.alt{background:linear-gradient(180deg,#ff9f43,#d7670e)}
+  .small{font-size:12px;color:#cfeefe}
+  .avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f3446,#08303d);border:2px solid rgba(255,255,255,0.04);font-size:22px}
+  .hud{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;z-index:60;background:rgba(2,8,12,0.6);padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);display:flex;gap:12px;align-items:center}
+  .hud-item{font-size:13px}
+  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:100}
+  .card{background:var(--panel);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);min-width:320px}
+  .shop{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .note{font-size:12px;color:#cfeeff}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <div class="panel">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div class="avatar" id="avatar">🐚</div>
+      <div style="flex:1">
+        <div style="font-weight:700" id="playerName">Navegador</div>
+        <div class="small" id="playerStats">0 troféus • 0 gemas</div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:8px">
+      <div style="flex:1">
+        <div class="label">Seu nome</div>
+        <input id="name" value="Navegador" />
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:8px">
+      <div style="flex:1">
+        <div class="label">Modo</div>
+        <select id="mode">
+          <option value="1">1 jogador (1 min)</option>
+          <option value="5">5 jogadores (3 min)</option>
+          <option value="10">10 jogadores (3 min)</option>
+        </select>
+      </div>
+      <div style="width:8px"></div>
+    </div>
+
+    <div class="row" style="margin-bottom:8px">
+      <button id="rnd" class="btn alt">Sortear personagem</button>
+      <button id="start" class="btn">Entrar</button>
+    </div>
+
+    <div style="height:8px"></div>
+    <div class="note">Controles: W/A/S/D mover • Espaço atacar/abrir baú • U upar baú • I loja • L login</div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Passe & Eventos</div>
+    <div class="small" id="passInfo">Progresso do passe: 0/250 (1 gema a cada 5 vitórias)</div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Login</div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <input id="email" placeholder="seu@exemplo.com" />
+      <button id="sendCode" class="btn">Enviar código</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <input id="code" placeholder="xxxxxx" style="width:120px" />
+      <button id="verifyCode" class="btn alt">Verificar</button>
+    </div>
+    <div class="small" style="margin-top:6px">Observação: função de envio é simulada localmente. Para envio real, implemente endpoint server-side.</div>
+  </div>
+</div>
+
+<div class="hud" id="hud">
+  <div class="hud-item" id="hudTimer">Tempo: 0s</div>
+  <div class="hud-item" id="hudHP">HP: 0</div>
+  <div class="hud-item" id="hudGems">Gemas: 0</div>
+  <div class="hud-item" id="hudStatus">Status: aguardando</div>
+</div>
+
+<!-- overlay for results -->
+<div class="overlay" id="overlay"><div class="card"><h3 id="overlayTitle">Título</h3><p id="overlayMsg"></p><div style="height:8px"></div><button id="overlayClose" class="btn">OK</button></div></div>
+
+<!-- shop overlay -->
+<div class="overlay" id="shopOverlay" style="display:none"><div class="card">
+  <h3>Loja / Evento</h3>
+  <div class="shop" id="shopList"></div>
+  <div style="height:8px"></div>
+  <button id="closeShop" class="btn alt">Fechar</button>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+/*
+  Implementação (único arquivo):
+  - Modos 1,5,10 (1 e 3 minutos conforme)
+  - Baús / Eventos / Skins (seguindo probabilidades)
+  - Função de login via email com código de 6 dígitos (SIMULA e fornece stubs para integração real)
+  - Sem backend: persistência local em localStorage
+*/
+
+const canvas = document.getElementById('canvas');
+const hudTimer = document.getElementById('hudTimer');
+const hudHP = document.getElementById('hudHP');
+const hudGems = document.getElementById('hudGems');
+const hudStatus = document.getElementById('hudStatus');
+const overlay = document.getElementById('overlay');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlayMsg = document.getElementById('overlayMsg');
+const overlayClose = document.getElementById('overlayClose');
+const shopOverlay = document.getElementById('shopOverlay');
+const shopList = document.getElementById('shopList');
+const closeShop = document.getElementById('closeShop');
+
+const RARITY_NAMES = ["Comum","Raro","Épico","Mítico","Lendário"];
+const RARITY_COLORS = ["#7a8a93","#53a6ff","#bc6aff","#ff9f43","#ffd166"];
+const CHEST_PROBS = [0.5,0.25,0.1875,0.0625,0.03125]; // given
+const SKIN_POOL = [
+  "Pikaia com chifres",
+  "Anomalocaris cérberus",
+  "Omnidens rei",
+  "Hallucigenia de fogo",
+  "Opabinia elefante"
+];
+const EVENT_SKIN_POOL = [
+  "Evento: Pikaia cristal",
+  "Evento: Anomalocaris névoa",
+  "Evento: Omnidens solar"
+];
+
+const STORAGE = 'cambrian_local_mods_v1';
+
+// game state
+let store = {
+  profile: { name:'Navegador', avatar:'🐚', trophies:0, gems:0, skins:[], passRewards:0, passWins:0 },
+  eventActive: true // toggle for event behavior
+};
+function saveStore(){ localStorage.setItem(STORAGE, JSON.stringify(store)); }
+function loadStore(){ try{ store = Object.assign(store, JSON.parse(localStorage.getItem(STORAGE) || '{}')); }catch(e){} }
+loadStore();
+
+// UI wiring
+document.getElementById('name').value = store.profile.name;
+document.getElementById('avatar').textContent = store.profile.avatar;
+document.getElementById('playerName').textContent = store.profile.name;
+document.getElementById('playerStats').textContent = `${store.profile.trophies} troféus • ${store.profile.gems} gemas`;
+
+function refreshHUD(){ hudGems.textContent = 'Gemas: ' + store.profile.gems; hudHP.textContent = state.player ? `HP: ${Math.ceil(state.player.hp)}` : 'HP: 0'; }
+refreshHUD();
+
+// Three.js minimal setup
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b2d49);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
+camera.position.set(0,220,420);
+const dir = new THREE.DirectionalLight(0xffffff,1);
+dir.position.set(120,200,120); scene.add(dir);
+scene.add(new THREE.AmbientLight(0x7fbfe6,0.6));
+
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400,900), new THREE.MeshLambertMaterial({color:0x0d4a71}));
+sea.rotation.x = -Math.PI/2; sea.position.y = -10; scene.add(sea);
+
+// visual containers
+const meshes = { player:null, prey:new Map(), chests:new Map(), ai:new Map() };
+
+function sphereMesh(radius,color){ return new THREE.Mesh(new THREE.SphereGeometry(radius,16,16), new THREE.MeshStandardMaterial({color})); }
+function chestMesh(color){ return new THREE.Mesh(new THREE.BoxGeometry(24,16,24), new THREE.MeshStandardMaterial({color, roughness:0.6})); }
+
+// helper RNG
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function clamp(v,a,b){ return Math.min(Math.max(v,a),b); }
+
+// game logic state
+const state = {
+  started:false, gameOver:false, mode:1, timer:0,
+  player:null,
+  prey:[],
+  chests:[],
+  aiHunters:[],
+  keys:{w:false,a:false,s:false,d:false,attack:false},
+  lastTs:0
+};
+
+// spawn helpers
+function spawnPlayer(species){
+  const map = {
+    Anomalocaris:{hp:110,speed:3.4,range:92,dmg:38,cool:620,radius:18,color:0xff8f5a},
+    Opabinia:{hp:120,speed:3.0,range:120,dmg:42,cool:760,radius:18,color:0x7ae582},
+    Omnidens:{hp:130,speed:2.6,range:160,dmg:52,cool:900,radius:20,color:0xe9c46a}
+  }[species];
+  return Object.assign({id:'you',species, x:640,y:360,alive:true,lastAttack:0}, map);
+}
+function spawnPikaia(id){ return { id, type:'Pikaia', x:rand(120,1120), y:rand(120,520), hp:30, radius:10, color:0xa1d9ff, alive:true }; }
+function spawnHall(id){ const a={id,type:'Hallucigenia'}; } // not used
+
+function spawnHallucigenia(id){
+  const a = { id, type:'Hallucigenia', x:rand(180,1040), y:rand(140,480), hp:60, radius:16, color:0xd9a1ff, alive:true, children:[] };
+  for(let i=0;i<2;i++){
+    a.children.push({ id:`${id}-c${i}`, type:'HallucigeniaChild', x:a.x + Math.cos(i*Math.PI)*30, y: a.y + Math.sin(i*Math.PI)*30, radius:8, color:0xf5d8ff, touched:false, alive:true });
+  }
+  return a;
+}
+
+function chestRarityRoll(){
+  const r = Math.random();
+  let acc=0;
+  for(let i=0;i<CHEST_PROBS.length;i++){ acc += CHEST_PROBS[i]; if(r<=acc) return i; }
+  return CHEST_PROBS.length - 1;
+}
+function makeChest(event=false){
+  const r = chestRarityRoll();
+  return { id:'c-'+Math.random().toString(36).slice(2,8), x:rand(120,1080), y:rand(120,480), rarity:r, hits:4, opened:false, event };
+}
+function makeLegendaryChest(){ return { id:'leg-'+Math.random().toString(36).slice(2,8), x:rand(120,1080), y:rand(120,480), rarity:4, hits:4, opened:false, event:false }; }
+
+// chest open logic: follows user spec for event chests; normal chests simpler
+function openChest(chest, openerId){
+  chest.opened = true;
+  if (chest.event){
+    const r = Math.random();
+    if (r < 0.50){ store.profile.gems += 10; hudStatus('Baú de evento: +10 gemas'); }
+    else if (r < 0.66){ const s = SKIN_POOL[Math.floor(Math.random()*SKIN_POOL.length)]; addSkin(s); hudStatus('Baú de evento: Skin padrão '+s); }
+    else if (r < 0.70){ const s = EVENT_SKIN_POOL[Math.floor(Math.random()*EVENT_SKIN_POOL.length)]; addSkin(s); hudStatus('Baú de evento: Skin de evento '+s); }
+    else { // 30% improvement
+      if (openerId === 'you') { state.player.speed *= 1.25; setTimeout(()=> state.player.speed /= 1.25, 20_000); }
+      hudStatus('Baú de evento: melhoria aleatória (velocidade)');
+    }
+  } else {
+    // non-event chest: chance scaled by rarity
+    const gemChanceByRarity = [0,0.35,0.45,0.6,0.8];
+    const r = Math.random();
+    const tier = chest.rarity;
+    const gemAmount = tier * 5;
+    if (r < gemChanceByRarity[tier] && gemAmount > 0){ store.profile.gems += gemAmount; hudStatus(`Baú ${RARITY_NAMES[tier]}: +${gemAmount} gemas`); }
+    else if (r < gemChanceByRarity[tier] + 0.16){ const s = SKIN_POOL[Math.floor(Math.random()*SKIN_POOL.length)]; addSkin(s); hudStatus(`Baú ${RARITY_NAMES[tier]}: skin ${s}`); }
+    else if (r < gemChanceByRarity[tier] + 0.16 + 0.30){ if (openerId==='you'){ state.player.speed *= 1.25; setTimeout(()=> state.player.speed /= 1.25,15000);} hudStatus(`Baú ${RARITY_NAMES[tier]}: melhoria`); }
+    else hudStatus(`Baú ${RARITY_NAMES[tier]}: nada especial`);
+  }
+  saveStore(); refreshHUD();
+}
+
+// skins management
+function addSkin(name){ if(!store.profile.skins.includes(name)) store.profile.skins.push(name); saveStore(); }
+function buySkin(name){
+  const cost = 100;
+  if(store.profile.gems < cost){ hudStatus('Gemas insuficientes'); return false; }
+  if(!confirm(`Comprar ${name} por ${cost} gemas?`)) return false;
+  store.profile.gems -= cost; addSkin(name); saveStore(); hudStatus('Skin comprada: '+name); return true;
+}
+
+// simple UI helpers
+function hudStatus(msg){ hudStatus.textContent = 'Status: '+msg; setTimeout(()=> { if(!state.gameOver) hudStatus.textContent = 'Status: em jogo'; }, 2500); }
+function showOverlay(title,msg){ overlayTitle.textContent = title; overlayMsg.textContent = msg; overlay.style.display = 'flex'; }
+overlayClose.addEventListener('click', ()=> overlay.style.display = 'none');
+
+// login via email with 6-digit code (SIMULATED client-side; also includes server stub comments)
+let simulatedCodes = {}; // { email: { code:'123456', expires:timestamp } }  -- used only in simulate mode
+
+const simulateEmailSend = true; // set false if you will implement server endpoints
+
+function sendVerificationCode(email){
+  // CLIENT: call this to request sending a 6-digit code to user's email.
+  // simulate if simulateEmailSend=true; otherwise POST to server endpoint /auth/send-code (not implemented here).
+  const code = String(Math.floor(100000 + Math.random()*900000));
+  const expiry = Date.now() + 5*60*1000; // 5 minutes
+  if (simulateEmailSend){
+    simulatedCodes[email] = { code, expires: expiry };
+    console.log(`[SIMULATION] Código para ${email}: ${code} (válido 5min)`); // developer can see code in console
+    alert('Código (simulado) enviado — ver console para ver o código durante o teste.');
+    return Promise.resolve({ ok:true, simulated:true });
+  } else {
+    // Example of server call (requires server implementation):
+    // return fetch('/auth/send-code', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email}) }).then(r=>r.json());
+    return Promise.reject(new Error('sendVerificationCode: modo real não implementado no cliente.'));
+  }
+}
+
+function verifyCode(email, codeEntered){
+  // CLIENT: verify code. If simulateEmailSend=true, validate locally; otherwise POST to /auth/verify-code.
+  if (simulateEmailSend){
+    const entry = simulatedCodes[email];
+    if (!entry) return Promise.resolve({ ok:false, reason:'Nenhum código enviado' });
+    if (Date.now() > entry.expires) return Promise.resolve({ ok:false, reason:'Código expirado' });
+    if (entry.code === String(codeEntered).trim()){
+      // authenticated: save profile name/email if needed
+      return Promise.resolve({ ok:true, email });
+    } else return Promise.resolve({ ok:false, reason:'Código inválido' });
+  } else {
+    // Example server call:
+    // return fetch('/auth/verify-code', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, code: codeEntered}) }).then(r=>r.json());
+    return Promise.reject(new Error('verifyCode: modo real não implementado no cliente.'));
+  }
+}
+
+// login UI wiring
+document.getElementById('sendCode').addEventListener('click', ()=> {
+  const email = document.getElementById('email').value.trim();
+  if(!email){ alert('Informe seu e-mail'); return; }
+  sendVerificationCode(email).then(res => {
+    if(res.ok){ alert('Código enviado (simulação/requer back-end para envio real).'); }
+  }).catch(err => { alert('Erro ao solicitar código: '+err.message); });
+});
+document.getElementById('verifyCode').addEventListener('click', ()=> {
+  const email = document.getElementById('email').value.trim();
+  const code = document.getElementById('code').value.trim();
+  if(!email || !code){ alert('Informe email e código'); return; }
+  verifyCode(email, code).then(res => {
+    if(res.ok){ store.profile.name = res.email.split('@')[0]; saveStore(); document.getElementById('name').value = store.profile.name; alert('Login verificado (simulado) como '+res.email); } else {
+      alert('Falha verificação: '+(res.reason||''));
+    }
+  }).catch(err => alert('Erro: '+err.message));
+});
+
+// input & interaction
+document.getElementById('rnd').addEventListener('click', ()=> {
+  const arr = ['Anomalocaris','Opabinia','Omnidens'];
+  state.selectedSpecies = arr[Math.floor(Math.random()*arr.length)];
+  hudStatus('Personagem sorteado: ' + state.selectedSpecies);
+});
+document.getElementById('start').addEventListener('click', ()=> {
+  store.profile.name = document.getElementById('name').value.trim() || store.profile.name;
+  saveStore();
+  startGame(Number(document.getElementById('mode').value));
+});
+
+// shop
+document.getElementById('closeShop').addEventListener('click', ()=> shopOverlay.style.display = 'none');
+
+function populateShop(){
+  shopList.innerHTML = '';
+  for (const s of SKIN_POOL){
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.style.margin = '4px';
+    b.textContent = `${s} — 100g`;
+    b.addEventListener('click', ()=> { if(buySkinConfirm(s)) shopOverlay.style.display='none'; });
+    shopList.appendChild(b);
+  }
+  const eventBtn = document.createElement('button');
+  eventBtn.className = 'btn alt';
+  eventBtn.textContent = 'Abrir baú de evento (simulação)';
+  eventBtn.addEventListener('click', ()=> {
+    const c = makeChest(true);
+    openChest(c,'you');
+    shopOverlay.style.display='none';
+  });
+  shopList.appendChild(eventBtn);
+}
+populateShop();
+
+function buySkinConfirm(name){
+  if (store.profile.gems < 100){ alert('Gemas insuficientes'); return false; }
+  if (!confirm(`Comprar ${name} por 100 gemas?`)) return false;
+  store.profile.gems -= 100; addSkin(name); saveStore();
+  refreshHUD();
+  return true;
+}
+
+function addSkin(name){ if(!store.profile.skins.includes(name)) store.profile.skins.push(name); saveStore(); }
+
+// keyboard
+document.addEventListener('keydown', e=>{
+  const k = e.key.toLowerCase();
+  if(k==='w') state.keys.w = true;
+  if(k==='s') state.keys.s = true;
+  if(k==='a') state.keys.a = true;
+  if(k==='d') state.keys.d = true;
+  if(e.code === 'Space'){ state.keys.attack = true; e.preventDefault(); attackAction(); }
+  if(k==='u') tryUpgradeNearbyChest();
+  if(k==='i') shopOverlay.style.display = 'flex';
+  if(k==='l') { document.getElementById('email').focus(); }
+});
+document.addEventListener('keyup', e=>{
+  const k = e.key.toLowerCase();
+  if(k==='w') state.keys.w = false;
+  if(k==='s') state.keys.s = false;
+  if(k==='a') state.keys.a = false;
+  if(k==='d') state.keys.d = false;
+  if(e.code === 'Space') state.keys.attack = false;
+});
+
+// game lifecycle functions
+function startGame(mode){
+  state.mode = mode;
+  state.started = true;
+  state.gameOver = false;
+  state.timer = (mode === 1) ? 60 : 180;
+  const species = state.selectedSpecies || ['Anomalocaris','Opabinia','Omnidens'][Math.floor(Math.random()*3)];
+  state.player = spawnPlayer(species);
+  // spawn prey & ai based on mode
+  state.prey = []; state.chests = []; state.aiHunters = [];
+  if(mode === 1){
+    state.prey.push(spawnPikaia('p1'));
+    state.aiHunters.push({ id:'ai1', x: rand(200,1000), y: rand(200,480), alive:true, speed:2.2, color:0xff9f43 });
+  } else if(mode === 5){
+    for(let i=0;i<3;i++) state.prey.push(spawnPikaia('p'+i));
+    state.prey.push(spawnHallucigenia('h1'));
+    state.aiHunters.push({ id:'ai1', x: rand(220,1000), y: rand(200,480), alive:true, speed:2.2, color:0xff9f43 });
+  } else {
+    for(let i=0;i<6;i++) state.prey.push(spawnPikaia('p'+i));
+    for(let i=0;i<2;i++) state.prey.push(spawnHallucigenia('h'+i));
+    state.aiHunters.push({ id:'ai1', x: rand(220,820), y: rand(200,480), alive:true, speed:2.2, color:0xff9f43 });
+    state.aiHunters.push({ id:'ai2', x: rand(240,980), y: rand(220,520), alive:true, speed:2.2, color:0x8ec9ff });
+  }
+  // chests: mix of normal and event chests if event active
+  for(let i=0;i<6;i++){
+    state.chests.push(makeChest(store.eventActive && Math.random() < 0.25));
+  }
+  // create meshes
+  syncMeshes(true);
+  hudStatus('Partida iniciada');
+  requestAnimationFrame(loop);
+}
+
+// attack: chest priority then prey
+function attackAction(){
+  if(!state.player || !state.started || state.gameOver) return;
+  const now = performance.now();
+  if(now - state.player.lastAttack < state.player.cool) return;
+  state.player.lastAttack = now;
+  // chest hit
+  let nearestChest = null; let best = Infinity;
+  for(const c of state.chests){ if(c.opened) continue; const d = Math.hypot(state.player.x - c.x, state.player.y - c.y); if(d < best){ best=d; nearestChest=c; } }
+  if(nearestChest && best <= 80){
+    nearestChest.hits = Math.max(0, nearestChest.hits - 1);
+    hudStatus(`Baú atingido: ${nearestChest.hits} toques`);
+    if(nearestChest.hits <= 0) openChest(nearestChest,'you');
+    syncMeshes();
+    return;
+  }
+  // attack nearest prey
+  let nearest = null; best = Infinity;
+  for(const p of state.prey){ if(!p.alive) continue; const d = Math.hypot(state.player.x - p.x, state.player.y - p.y); if(d < best){ best=d; nearest=p; } }
+  if(nearest && best <= state.player.range + nearest.radius + 8){
+    if(nearest.type === 'Pikaia'){ nearest.alive = false; hudStatus('Pikaia capturada'); }
+    else if(nearest.type === 'Hallucigenia'){ nearest.hp -= state.player.damage; hudStatus('Hallucigenia atacada'); if(nearest.hp <= 0){ nearest.alive=false; hudStatus('Hallucigenia morta'); } }
+    syncMeshes();
+  }
+}
+
+// upgrade chest near
+function tryUpgradeNearbyChest(){
+  if(!state.player) return;
+  let nearest=null; let nd=Infinity;
+  for(const c of state.chests){ if(c.opened) continue; const d = Math.hypot(state.player.x - c.x, state.player.y - c.y); if(d<nd){ nd=d; nearest=c; } }
+  if(!nearest || nd>80){ hudStatus('Nenhum baú próximo (alcance 80)'); return; }
+  const cost = 50 * (nearest.rarity + 1);
+  if(store.profile.gems < cost){ hudStatus(`Gemas insuficientes: ${cost}`); return; }
+  if(!confirm(`Upar baú para ${RARITY_NAMES[Math.min(4, nearest.rarity + 1)]} custa ${cost} gemas. Confirmar?`)) return;
+  store.profile.gems -= cost; saveStore(); nearest.rarity = Math.min(4, nearest.rarity + 1); nearest.hits = 4; hudStatus('Baú upado para ' + RARITY_NAMES[nearest.rarity]); syncMeshes();
+}
+
+// AI simple update
+function updateAI(dt){
+  for(const ai of state.aiHunters){
+    if(!ai.alive) continue;
+    // find nearest prey
+    let target=null; let best=Infinity;
+    for(const p of state.prey){ if(!p.alive) continue; const d = Math.hypot(ai.x - p.x, ai.y - p.y); if(d<best){best=d;target=p;} }
+    if(target){
+      const dx = target.x - ai.x; const dy = target.y - ai.y; const len = Math.hypot(dx,dy)||1;
+      ai.x += (dx/len)*ai.speed*dt*60; ai.y += (dy/len)*ai.speed*dt*60;
+      if(best < 50){ if(target.type==='Pikaia') target.alive=false; else { target.hp -= 30; if(target.hp<=0) target.alive=false; } }
+    } else {
+      ai.x += Math.sin(performance.now()*0.001 + ai.x) * 0.3; ai.y += Math.cos(performance.now()*0.001 + ai.y) * 0.3;
+    }
+    ai.x = clamp(ai.x,40,1240); ai.y = clamp(ai.y,40,620);
+  }
+}
+
+// check victory/defeat
+function checkEnd(){
+  // non-child alive targets
+  const alive = state.prey.filter(p => p.alive && p.type !== 'HallucigeniaChild').length;
+  if(alive === 0){ // win
+    state.gameOver = true;
+    store.profile.trophies += 10;
+    store.profile.passWins = (store.profile.passWins||0) + 1;
+    if(store.profile.passWins % 5 === 0) { store.profile.gems = (store.profile.gems||0) + 1; }
+    // pass reward chest logic
+    if(store.profile.passWins % 5 === 0){ store.profile.passRewardCount = (store.profile.passRewardCount||0) + 1; if(store.profile.passRewardCount % 50 === 0) state.chests.push(makeLegendaryChest()); if(store.profile.passRewardCount >= 10) state.chests.push(makeChest()); }
+    saveStore(); refreshHUD();
+    showOverlay('Vitória', 'Você capturou todos! +10 troféus');
+  }
+  if(state.player && state.player.hp <= 0){
+    state.gameOver = true;
+    store.profile.trophies = (store.profile.trophies||0) - 3;
+    saveStore(); refreshHUD();
+    showOverlay('Derrota','Seu personagem foi derrotado. -3 troféus');
+  }
+}
+
+// basic storage functions
+function saveStore(){ localStorage.setItem(STORAGE, JSON.stringify(store)); updateProfileUI(); }
+function updateProfileUI(){ document.getElementById('playerName').textContent = store.profile.name; document.getElementById('playerStats').textContent = `${store.profile.trophies} troféus • ${store.profile.gems} gemas`; }
+
+// Three.js mesh sync
+function syncMeshes(initial=false){
+  // create / update player mesh
+  if(state.player){
+    if(!meshes.player){ meshes.player = sphereMesh(state.player.radius, state.player.color); scene.add(meshes.player); }
+    meshes.player.position.set(state.player.x - 640, 12, state.player.y - 360);
+  }
+  // prey
+  const preyIds = new Set();
+  for(const p of state.prey){
+    preyIds.add(p.id);
+    if(!meshes.prey.has(p.id)){ const m = sphereMesh(p.radius, p.color); scene.add(m); meshes.prey.set(p.id, m); }
+    const m = meshes.prey.get(p.id); m.visible = p.alive; m.position.set(p.x - 640, 12, p.y - 360);
+  }
+  for(const id of Array.from(meshes.prey.keys())) if(!preyIds.has(id)){ scene.remove(meshes.prey.get(id)); meshes.prey.delete(id); }
+  // chests
+  const chestIds = new Set();
+  for(const c of state.chests){
+    chestIds.add(c.id);
+    if(!meshes.chests.has(c.id)){ const m = chestMesh(c.color || RARITY_COLORS[c.rarity]); scene.add(m); meshes.chests.set(c.id, m); }
+    const m = meshes.chests.get(c.id); m.visible = !c.opened; m.position.set(c.x - 640, 10, c.y - 360); m.scale.y = 0.8 + ((4 - c.hits)/4)*0.8;
+  }
+  for(const id of Array.from(meshes.chests.keys())) if(!chestIds.has(id)){ scene.remove(meshes.chests.get(id)); meshes.chests.delete(id); }
+  // AI
+  const aiIds = new Set();
+  for(const ai of state.aiHunters){
+    aiIds.add(ai.id);
+    if(!meshes.ai.has(ai.id)){ const m = sphereMesh(14, ai.color); scene.add(m); meshes.ai.set(ai.id,m); }
+    const m = meshes.ai.get(ai.id); m.visible = ai.alive; m.position.set(ai.x - 640, 12, ai.y - 360);
+  }
+  for(const id of Array.from(meshes.ai.keys())) if(!aiIds.has(id)){ scene.remove(meshes.ai.get(id)); meshes.ai.delete(id); }
+}
+
+// player mesh constructor helpers
+function sphereMesh(radius, color){ return new THREE.Mesh(new THREE.SphereGeometry(radius,18,18), new THREE.MeshStandardMaterial({color})); }
+function chestMesh(color){ return new THREE.Mesh(new THREE.BoxGeometry(24,16,24), new THREE.MeshStandardMaterial({color,roughness:0.6})); }
+
+// main loop
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(state.started && !state.gameOver){
+    const dt = (state.lastTs ? (ts - state.lastTs)/1000 : 0.016);
+    state.lastTs = ts;
+    state.timer = Math.max(0, state.timer - dt);
+    hudTimer.textContent = 'Tempo: ' + Math.ceil(state.timer) + 's';
+    // player move
+    const mvx = (state.keys.d?1:0) - (state.keys.a?1:0);
+    const mvy = (state.keys.s?1:0) - (state.keys.w?1:0);
+    if(mvx !== 0 || mvy !== 0){
+      const len = Math.hypot(mvx,mvy)||1;
+      state.player.x += (mvx/len) * state.player.speed * dt * 60;
+      state.player.y += (mvy/len) * state.player.speed * dt * 60;
+      state.player.x = clamp(state.player.x, 40, 1240); state.player.y = clamp(state.player.y, 40, 620);
+    }
+    // prey AI
+    for(const p of state.prey){
+      if(!p.alive) continue;
+      if(p.type === 'Pikaia'){
+        const dx = p.x - state.player.x, dy = p.y - state.player.y; const d = Math.hypot(dx,dy)||1;
+        if(d < 180){ p.x += (dx/d) * 170 * dt; p.y += (dy/d) * 170 * dt; }
+        else { p.x += Math.sin((performance.now()*0.002)+p.x) * 0.6; p.y += Math.cos((performance.now()*0.003)+p.y) * 0.6; }
+        if(Math.hypot(p.x - state.player.x, p.y - state.player.y) < p.radius + state.player.radius + 8) state.player.hp -= 10 * dt;
+      }
+      if(p.type === 'Hallucigenia'){
+        const dx = state.player.x - p.x, dy = state.player.y - p.y; const d = Math.hypot(dx,dy)||1;
+        if(d < 220){ p.x += (dx/d) * 60 * dt; p.y += (dy/d) * 60 * dt; }
+        for(let i=0;i<p.children.length;i++){
+          const c = p.children[i];
+          const ang = (Math.PI*2 / p.children.length)*i + performance.now()*0.0012;
+          c.x = p.x + Math.cos(ang) * (28 + i*14); c.y = p.y + Math.sin(ang) * (28 + i*14);
+          if(Math.hypot(c.x - state.player.x, c.y - state.player.y) < c.radius + state.player.radius + 8){
+            doLose('Você tocou um filho da Hallucigenia.');
+            return;
+          }
+        }
+        if(Math.hypot(p.x - state.player.x, p.y - state.player.y) < p.radius + state.player.radius + 12) state.player.hp -= 18 * dt;
+      }
+    }
+    // AI hunters
+    updateAI(dt);
+    // timer hits
+    if(state.timer <= 0){ doLose('O tempo acabou antes de capturar todos.'); }
+    // update meshes
+    syncMeshes();
+    // HUD
+    hudHP.textContent = 'HP: ' + Math.max(0, Math.ceil(state.player.hp));
+    hudGems.textContent = 'Gemas: ' + store.profile.gems;
+    checkEnd();
+  }
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(loop);
+
+// helper doLose
+function doLose(msg){
+  state.gameOver = true;
+  store.profile.trophies = (store.profile.trophies||0) - 3;
+  saveStore();
+  showOverlay('Derrota', msg + ' (-3 troféus)');
+  hudStatus('derrota');
+}
+
+// save store shorthand
+function saveStore(){ localStorage.setItem(STORAGE, JSON.stringify(store)); updateProfileUI(); refreshHUD(); }
+
+// upgrade chest nearby
+function tryUpgradeNearbyChest(){
+  if(!state.player) { hudStatus('Sem jogador'); return; }
+  let nearest=null, nd=Infinity;
+  for(const c of state.chests){ if(c.opened) continue; const d=Math.hypot(state.player.x-c.x, state.player.y-c.y); if(d<nd){ nd=d; nearest=c; } }
+  if(!nearest || nd>80) { hudStatus('Nenhum baú próximo (alcance 80)'); return; }
+  const cost = 50 * (nearest.rarity + 1);
+  if(store.profile.gems < cost){ hudStatus(`Gemas insuficientes: precisa ${cost}`); return; }
+  if(!confirm(`Upar baú para ${RARITY_NAMES[Math.min(4,nearest.rarity+1)]} custa ${cost} gemas.`)) return;
+  store.profile.gems -= cost; nearest.rarity = Math.min(4, nearest.rarity + 1); nearest.hits = 4; saveStore();
+  hudStatus('Baú upado para ' + RARITY_NAMES[nearest.rarity]);
+  syncMeshes();
+}
+
+// UI: shop open
+document.getElementById('shopOverlay').style.display = 'none';
+closeShop.addEventListener('click', ()=> shopOverlay.style.display = 'none');
+
+// helper open shop
+function openShop(){ shopOverlay.style.display = 'flex'; }
+document.addEventListener('keydown', e => { if(e.key === 'i') openShop(); });
+
+// populate shop (simple)
+function populateShop(){
+  shopList.innerHTML = '';
+  for(const s of SKIN_POOL){
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.style.margin = '4px';
+    b.textContent = `${s} — 100 gemas`;
+    b.onclick = ()=> { if(store.profile.gems < 100){ alert('Gemas insuficientes'); return; } if(!confirm(`Comprar ${s} por 100 gemas?`)) return; store.profile.gems -= 100; addSkin(s); saveStore(); alert('Skin comprada: '+s); };
+    shopList.appendChild(b);
+  }
+  const eventBtn = document.createElement('button');
+  eventBtn.className = 'btn alt';
+  eventBtn.textContent = 'Abrir baú de evento (simulação)';
+  eventBtn.onclick = ()=> { const c = makeChest(true); openChest(c,'you'); };
+  shopList.appendChild(eventBtn);
+}
+populateShop();
+
+// initial helper functions for saving/refresh
+function refreshHUD(){ hudGems.textContent = 'Gemas: ' + (store.profile.gems||0); document.getElementById('playerStats').textContent = `${store.profile.trophies} troféus • ${store.profile.gems} gemas`; }
+refreshHUD();
+
+// helper start: triggered by Start button
+function spawnPikaia(id){ return spawnPikaia; } // placeholder — we used function earlier
+
+// finally, wire some UI: start / random
+document.getElementById('rnd').addEventListener('click', ()=> {
+  const arr = ['Anomalocaris','Opabinia','Omnidens'];
+  state.selectedSpecies = arr[Math.floor(Math.random()*arr.length)];
+  hudStatus('Personagem sorteado: ' + state.selectedSpecies);
+});
+document.getElementById('start').addEventListener('click', ()=> {
+  store.profile.name = document.getElementById('name').value.trim() || store.profile.name;
+  saveStore();
+  startGame(Number(document.getElementById('mode').value));
+});
+
+// Because code is long, ensure definitions used above exist: we referenced spawnPikaia earlier, but we must avoid duplicate names. We'll implement missing functions below and adjust minor names.
+function spawnPikaia(id){
+  return { id, type:'Pikaia', x:rand(120,1120), y:rand(120,520), hp:30, radius:10, color:0xa1d9ff, alive:true };
+}
+function spawnHallucigenia(id){
+  const a = { id, type:'Hallucigenia', x:rand(180,1040), y:rand(140,480), hp:60, radius:16, color:0xd9a1ff, alive:true, children:[] };
+  for(let i=0;i<2;i++) a.children.push({ id:`${id}-c${i}`, type:'HallucigeniaChild', x:a.x + Math.cos(i*Math.PI)*30, y:a.y + Math.sin(i*Math.PI)*30, radius:8, alive:true, touched:false, color:0xf5d8ff });
+  return a;
+}
+function spawnPlayer(species){
+  const map = {
+    Anomalocaris:{hp:110,speed:3.4,range:92,dmg:38,cool:650,radius:18,color:0xff8f5a},
+    Opabinia:{hp:120,speed:3.0,range:120,dmg:42,cool:760,radius:18,color:0x7ae582},
+    Omnidens:{hp:130,speed:2.6,range:160,dmg:52,cool:900,radius:20,color:0xe9c46a}
+  }[species];
+  return { id:'you', name: store.profile.name, species, x:640, y:360, hp:map.hp, maxHp:map.hp, speed:map.speed, range:map.range, damage:map.dmg, cool:map.cool, radius:map.radius, color:map.color, alive:true, lastAttack:0 };
+}
+
+function startGame(mode){
+  state.mode = mode;
+  state.started = true;
+  state.gameOver = false;
+  state.timer = mode === 1 ? 60 : 180;
+  const species = state.selectedSpecies || ['Anomalocaris','Opabinia','Omnidens'][Math.floor(Math.random()*3)];
+  state.player = spawnPlayer(species);
+  // reset arrays
+  state.prey = []; state.chests = []; state.aiHunters = [];
+  // compose according to mode
+  if(mode === 1){
+    state.prey.push(spawnPikaia('p1'));
+    state.aiHunters.push({ id:'ai1', x:rand(200,1000), y:rand(200,480), alive:true, speed:2.2, color:0xff9f43 });
+  } else if(mode === 5){
+    for(let i=0;i<3;i++) state.prey.push(spawnPikaia('p'+i));
+    state.prey.push(spawnHallucigenia('h1'));
+    state.aiHunters.push({ id:'ai1', x:rand(220,1000), y:rand(200,480), alive:true, speed:2.2, color:0xff9f43 });
+  } else {
+    for(let i=0;i<6;i++) state.prey.push(spawnPikaia('p'+i));
+    for(let i=0;i<2;i++) state.prey.push(spawnHallucigenia('h'+i));
+    state.aiHunters.push({ id:'ai1', x:rand(240,920), y:rand(200,480), alive:true, speed:2.2, color:0xff9f43 });
+    state.aiHunters.push({ id:'ai2', x:rand(260,980), y:rand(220,520), alive:true, speed:2.2, color:0x8ec9ff });
+  }
+  for(let i=0;i<6;i++) state.chests.push(makeChest(store.eventActive && Math.random()<0.25));
+  syncMeshes(true);
+  hudStatus('Partida iniciada');
+  requestAnimationFrame(loopMain);
+}
+
+// main loop simplified (we already started a loop above, but to keep code consistent we'll define loopMain)
+let lastTime = performance.now();
+function loopMain(now){
+  requestAnimationFrame(loopMain);
+  const dt = (now - lastTime) / 1000; lastTime = now;
+  if(state.started && !state.gameOver){
+    state.timer = Math.max(0, state.timer - dt);
+    hudTimer.textContent = 'Tempo: ' + Math.ceil(state.timer) + 's';
+    // movement
+    let mx = (state.keys.d?1:0) - (state.keys.a?1:0); let my = (state.keys.s?1:0) - (state.keys.w?1:0);
+    if(mx !== 0 || my !== 0){ const len = Math.hypot(mx,my)||1; state.player.x += (mx/len)*state.player.speed*dt*60; state.player.y += (my/len)*state.player.speed*dt*60; state.player.x = clamp(state.player.x,40,1240); state.player.y = clamp(state.player.y,40,620); }
+    // prey update
+    for(const p of state.prey){
+      if(!p.alive) continue;
+      if(p.type === 'Pikaia'){
+        const dx = p.x - state.player.x, dy = p.y - state.player.y; const d = Math.hypot(dx,dy)||1;
+        if(d < 180){ p.x += (dx/d)*170*dt; p.y += (dy/d)*170*dt; } else { p.x += Math.sin((performance.now()*0.002)+p.x)*0.6; p.y += Math.cos((performance.now()*0.003)+p.y)*0.6; }
+        if(Math.hypot(p.x-state.player.x,p.y-state.player.y) < p.radius + state.player.radius + 8) state.player.hp -= 10*dt;
+      }
+      if(p.type === 'Hallucigenia'){
+        const dx = state.player.x - p.x, dy = state.player.y - p.y; const d = Math.hypot(dx,dy)||1;
+        if(d < 220){ p.x += (dx/d)*60*dt; p.y += (dy/d)*60*dt; }
+        for(let i=0;i<p.children.length;i++){
+          const c = p.children[i]; const ang = (Math.PI*2/p.children.length)*i + performance.now()*0.0012;
+          c.x = p.x + Math.cos(ang)*(28 + i*14); c.y = p.y + Math.sin(ang)*(28 + i*14);
+          if(Math.hypot(c.x-state.player.x,c.y-state.player.y) < c.radius + state.player.radius + 8){ doLose('Você tocou um filho da Hallucigenia.'); return; }
+        }
+        if(Math.hypot(p.x-state.player.x,p.y-state.player.y) < p.radius + state.player.radius + 12) state.player.hp -= 18*dt;
+      }
+    }
+    updateAI(dt);
+    syncMeshes();
+    hudHP.textContent = 'HP: ' + Math.max(0, Math.ceil(state.player.hp));
+    hudGems.textContent = 'Gemas: ' + store.profile.gems;
+    if(state.timer <= 0){ doLose('O tempo acabou antes de capturar todos.'); }
+    checkEnd();
+  }
+  renderer.render(scene,camera);
+}
+
+// window resize
+window.addEventListener('resize', ()=>{ renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); });
+
+// small helpers for UI & data
+function refreshHUD(){ hudGems.textContent = 'Gemas: ' + (store.profile.gems||0); document.getElementById('playerStats').textContent = `${store.profile.trophies||0} troféus • ${store.profile.gems||0} gemas`; }
+refreshHUD();
+saveStore();
+
+</script>
+</body>
+</html>
